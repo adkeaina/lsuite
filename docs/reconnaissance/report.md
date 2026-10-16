@@ -16,7 +16,7 @@ Verified 2026-10-16. Website interfaces are undocumented and may change. No priv
 
 Current-term course groups are supported. Future/past/community filters were visible but their request contracts are unverified, so no term-filter command is promised. Unpublished courses are reported distinctly and cannot be treated as empty accessible courses.
 
-The tested list documents embed full arrays without cursor fields. Record this as single-document traversal, not a guarantee about all future website versions. Content listing provides page IDs and parent IDs; deduplicate IDs, check parent cycles, and bound reads. External links are references only. Pagination, missing details, unavailable pages, schema changes, or traversal bounds must reduce completeness.
+The tested list documents embed full arrays without cursor fields. Record this as single-document traversal, not a guarantee about all future website versions. Content listing provides stable page IDs, distinct short `url` route tokens used after `/pages/id-`, and parent IDs; deduplicate IDs, check parent cycles, and bound reads. External links are references only. Pagination, missing details, unavailable pages, schema changes, or traversal bounds must reduce completeness.
 
 Observed absence of an attachment or an empty array may be reported only when its containing representation validated. Permission-denied and unavailable routes must remain errors/unavailable; no live permission-failure test was forced. Missing feedback, unpublished pages, unexposed records, binary files, and calculated grade totals are not inferred.
 
