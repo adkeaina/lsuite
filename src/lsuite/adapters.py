@@ -67,7 +67,7 @@ class LearningSuiteClient:
                     m = re.search(r'(?:^|/)cid-([A-Za-z0-9_-]+)(?:/|$)', href)
                     cid = 'cid-' + m.group(1) if m else None
                     published = row.get('published')
-                    out.append({'source_id': cid, 'name': row['courseTitle'], 'term': group.get('periodName'), 'section': None,
+                    out.append({'source_id': cid, 'name': row['courseTitle'], 'term': group.get('periodName'), 'section': (re.search(r'\((\d{1,4})\)', row['courseTitle']).group(1) if re.search(r'\((\d{1,4})\)', row['courseTitle']) else None),
                                 'publication': 'published' if published is True else 'unpublished' if published is False else 'unknown',
                                 'access': 'available' if published and cid and not row.get('externalURL') else 'external' if row.get('externalURL') else 'unavailable',
                                 'url': ORIGIN + '/' + cid + '/student/home' if cid else None})
@@ -155,6 +155,13 @@ class LearningSuiteClient:
                 raise LSuiteError('representation_changed', 'Content listing did not return page records.')
             if any(initial.get(k) for k in ('nextCursor', 'next_cursor', 'cursor', 'hasMore')):
                 problems.append({'code': 'pagination_unverified', 'message': 'Unexpected pagination marker; traversal stopped without guessing its contract.'})
+            valid_pages = []
+            for row in pages:
+                if not isinstance(row.get('id'), str) or not re.fullmatch(r'[A-Za-z0-9_-]+', row['id']) or (row.get('parentID') is not None and not isinstance(row['parentID'], str)):
+                    problems.append({'code': 'representation_changed', 'message': 'Malformed page identifier or parent; record skipped.'})
+                else:
+                    valid_pages.append(row)
+            pages = valid_pages
             ids = [x.get('id') for x in pages]
             if len(set(ids)) != len(ids):
                 problems.append({'code': 'duplicate_page', 'message': 'Repeated page IDs were deduplicated.'})
@@ -188,6 +195,8 @@ class LearningSuiteClient:
                     page = detail.get('page')
                     if not isinstance(page, dict) or page.get('id') != ident or not isinstance(page.get('content'), list):
                         raise LSuiteError('detail_unavailable', 'The requested content page detail did not match its listing.')
+                    if any(not isinstance(x, dict) for x in page['content']) or not isinstance(detail.get('html'), str):
+                        raise LSuiteError('representation_changed', 'Content blocks or rendered HTML have an unexpected shape.')
                     if page.get('expires'):
                         raise LSuiteError('unavailable', 'Content page reports expired availability.')
                     main = BeautifulSoup(detail['html'], 'html.parser').select_one('#mainContent')

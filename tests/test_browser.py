@@ -57,3 +57,40 @@ def test_optional_browser_reads_local_fixture_site(tmp_path, monkeypatch, expire
         transport.close()
         server.shutdown()
         server.server_close()
+
+
+def test_browser_blocks_unverified_same_host_writes_and_waits_for_content(tmp_path,monkeypatch):
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+    from urllib.parse import parse_qs
+    import lsuite.browser as module
+    pytest.importorskip('playwright.sync_api')
+    received=[]
+    class Site(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers()
+            self.wfile.write(b'''<main id="mainContent"><h1>Page</h1></main><script>
+            (async()=>{
+              await fetch('/ajax.php',{method:'POST',body:'funcName=getPublishedCoursePages'});
+              await fetch('/ajax.php',{method:'POST',body:'funcName=readPage'});
+              try{await fetch('/ajax.php',{method:'POST',body:'funcName=submitAssignment'})}catch(e){}
+              setTimeout(()=>{document.querySelector('#mainContent').innerHTML='<h1>Page</h1><p>Deferred body</p>';document.body.dataset.done='yes'},200);
+            })();</script>''')
+        def do_POST(self):
+            fn=parse_qs(self.rfile.read(int(self.headers['Content-Length'])).decode())['funcName'][0]
+            received.append(fn)
+            self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers()
+            value=[{'id':'page','url':'route'}] if fn=='getPublishedCoursePages' else {'id':'page','title':'Page','content':[{'id':'block','data':'<p>Deferred body</p>','title':'','displayOrder':1}]}
+            self.wfile.write(json.dumps(value).encode())
+        def log_message(self,*args):pass
+    server=ThreadingHTTPServer(('127.0.0.1',0),Site)
+    threading.Thread(target=server.serve_forever,daemon=True).start()
+    monkeypatch.setattr(module,'ORIGIN','http://127.0.0.1:'+str(server.server_port))
+    t=BrowserTransport(tmp_path,credentials={'cookies':{'PHPSESSID':'synthetic'}})
+    try:
+        result=t.read('/cid-demo/student/pages')
+        t._page.wait_for_function('document.body.dataset.done==="yes"',timeout=3000)
+        assert 'submitAssignment' not in received
+        assert 'Deferred body' in __import__('bs4').BeautifulSoup(result['html'],'html.parser').select_one('#mainContent').get_text()
+    finally:t.close();server.shutdown();server.server_close()

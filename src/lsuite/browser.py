@@ -1,6 +1,5 @@
 """Optional, dedicated browser login and bounded content reads."""
-import json
-import os
+import re
 import shutil
 import tempfile
 import time
@@ -8,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 from .models import LSuiteError
 from .http import ORIGIN, checked_source
+from bs4 import BeautifulSoup
 
 
 def playwright_api():
@@ -37,7 +37,7 @@ class BrowserTransport:
             self._context = self._browser.new_context()
             self._context.add_cookies([{'name': 'PHPSESSID', 'value': self.credentials['cookies']['PHPSESSID'], 'url': ORIGIN, 'secure': True}])
             # Only the verified data host receives resources or navigation in read mode.
-            self._context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).scheme == urlsplit(ORIGIN).scheme and urlsplit(route.request.url).netloc == urlsplit(ORIGIN).netloc else route.abort())
+            self._context.route('**/*', self._route)
             self._page = self._context.new_page()
         except LSuiteError:
             self.close()
@@ -45,6 +45,24 @@ class BrowserTransport:
         except Exception:
             self.close()
             raise LSuiteError('browser_unavailable', 'Chromium could not start. Run python -m playwright install chromium.') from None
+
+
+    def _route(self, route):
+        request = route.request
+        u, origin = urlsplit(request.url), urlsplit(ORIGIN)
+        allowed = u.scheme == origin.scheme and u.netloc == origin.netloc
+        if allowed and request.method in ('GET', 'HEAD'):
+            if request.is_navigation_request():
+                try:
+                    checked_source(re.sub(r'^/\.[A-Za-z0-9_-]+(?=/)', '', u.path) + ('?' + u.query if u.query else ''))
+                except LSuiteError:
+                    allowed = False
+        elif allowed and request.method == 'POST':
+            func = parse_qs(request.post_data or '').get('funcName', [''])[0]
+            allowed = u.path == '/ajax.php' and func in ('getPublishedCoursePages', 'readPage', 'setSessionDev')
+        else:
+            allowed = False
+        return route.continue_() if allowed else route.abort()
 
     def validate(self):
         self.read('/student/top')
@@ -55,7 +73,7 @@ class BrowserTransport:
         result = {'pages': None, 'page': None, 'html': None}
         auth_failed = []
         def response(r):
-            if urlsplit(r.url).hostname != 'learningsuite.byu.edu':
+            if urlsplit(r.url).netloc != urlsplit(ORIGIN).netloc:
                 return
             if r.status == 401:
                 auth_failed.append(True)
@@ -84,6 +102,27 @@ class BrowserTransport:
                 self._page.wait_for_timeout(50)
             else:
                 raise LSuiteError('browser_incomplete', 'Browser did not finish the verified representation within 30 seconds.')
+            if isinstance(result.get('page'), dict):
+                expected = []
+                raw_blocks = result['page'].get('content')
+                if isinstance(raw_blocks, list):
+                    for block in raw_blocks:
+                        data = block.get('data') if isinstance(block, dict) else None
+                        if isinstance(data, str) and data.lstrip().startswith('<'):
+                            soup = BeautifulSoup(data, 'html.parser')
+                            for tag in soup(['script', 'style']):
+                                tag.decompose()
+                            text = re.sub(r'\s+', ' ', soup.get_text(' ', strip=True)).strip()
+                            text = re.sub(r'\s+([.,;:!?])', r'\1', text)
+                            if text:
+                                expected.append(text)
+                if expected:
+                    try:
+                        self._page.wait_for_function(
+                            '(expected)=>{const e=document.querySelector("#mainContent"); if(!e)return false; const t=e.innerText.replace(/\\s+/g," ").replace(/\\s+([.,;:!?])/g,"$1"); return expected.every(x=>t.includes(x));}',
+                            arg=expected, timeout=30000)
+                    except Exception:
+                        raise LSuiteError('browser_incomplete', 'Content metadata loaded but the rendered body did not finish.') from None
             result['html'] = self._page.content()
             return result
         except LSuiteError:

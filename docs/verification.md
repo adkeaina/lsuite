@@ -4,7 +4,7 @@ Executed 2026-10-16 on macOS arm64 using Python 3.9.6, an isolated project virtu
 
 ## Automated checks
 
-`python -m pytest -q`: 67 passing tests before final branch review. Coverage includes the JSON schema, UTC retrieval timestamps, source-date preservation, failed credential replacement, storage modes, login HTML with HTTP 200, login redirects, cross-host redirects, attachment-source rejection, timeouts, bounded retries, rate limits, permission failures, local browser fixtures, section parsing, unpublished courses, explicit empty/unsupported results, content cycles, unexpected cursor markers, stable-ID/route-token distinctions, mixed exports, interrupted writes, exclusive no-overwrite races, and CLI stdout/stderr separation.
+`python -m pytest -q`: 72 passing tests after the final branch review and regression fixes. Coverage includes the JSON schema, UTC retrieval timestamps, source-date preservation, failed credential replacement, storage modes, login HTML with HTTP 200, login redirects, cross-host redirects, attachment-source rejection, timeouts, bounded retries, rate limits, permission failures, local browser fixtures, section parsing, unpublished courses, explicit empty/unsupported results, content cycles, unexpected cursor markers, stable-ID/route-token distinctions, mixed exports, interrupted writes, exclusive no-overwrite races, and CLI stdout/stderr separation.
 
 The console-script help, authentication JSON, and invalid-input JSON were checked from a directory outside the project. The user launcher resolves to the virtual-environment script and is on the checked shell's PATH.
 
@@ -32,4 +32,6 @@ A partial-export fixture confirms that a failed section retains successful ones 
 
 ## Review
 
-A separate whole-branch author review follows implementation. No subagent is used, per the user's instruction. This is weaker than an independent fresh-context review.
+A separate whole-branch author review was completed against the plan, spec, review-focus cases, source diff, tests, and live evidence. Five findings were fixed with regression tests watched failing before passing: encoded session URL redaction, unverified browser writes/navigation, malformed content retention, exposed course-section metadata, and deferred browser body rendering. The final suite passed 72 tests, and all installed live commands plus combined export passed again after the fixes.
+
+No subagent was used, per the user's instruction. This author review is weaker than an independent fresh-context review. No unresolved important findings or deferred minors were identified.

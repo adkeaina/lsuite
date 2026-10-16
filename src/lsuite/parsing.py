@@ -1,11 +1,32 @@
 """Normalize website content without executing it or inventing absent data."""
 import re
+import html
 from datetime import datetime
-from urllib.parse import urlsplit, urljoin
+from urllib.parse import urlsplit, urljoin, parse_qsl, urlencode, urlunsplit, unquote
 from bs4 import BeautifulSoup
 from .http import ORIGIN
 
 SENSITIVE = r'(?:subsessionid|phpsessid|sessionid|session|access_token|refresh_token|token|authorization)'
+
+
+def _safe_url(value):
+    value = html.unescape(value)
+    try:
+        u = urlsplit(value)
+        def sensitive(key):
+            for _ in range(3):
+                decoded = unquote(key)
+                if decoded == key:
+                    break
+                key = decoded
+            return re.fullmatch(SENSITIVE, key, re.I) is not None
+        query = urlencode([(k, v) for k, v in parse_qsl(u.query, keep_blank_values=True) if not sensitive(k)])
+        path = u.path
+        if u.hostname == 'learningsuite.byu.edu' or not u.netloc:
+            path = re.sub(r'^/\.[A-Za-z0-9_-]+(?=/)', '', path)
+        return urlunsplit((u.scheme, u.netloc.rsplit('@', 1)[-1], path, query, u.fragment))
+    except ValueError:
+        return '[invalid source URL]'
 
 
 def sanitize(value):
@@ -14,6 +35,10 @@ def sanitize(value):
     if isinstance(value, list):
         return [sanitize(v) for v in value]
     if isinstance(value, str):
+        value = re.sub(r'https?://[^\s\"\'<>]+', lambda m: _safe_url(m.group()), value)
+        value = re.sub(r'''((?:href|src)=["'])([^"']+)(["'])''', lambda m: m.group(1) + _safe_url(m.group(2)) + m.group(3), value, flags=re.I)
+        if value.startswith('/') and '<' not in value and not re.search(r'\s', value):
+            value = _safe_url(value)
         value = re.sub(r'(https?://learningsuite\.byu\.edu)/\.[A-Za-z0-9_-]+(?=/)', r'\1', value)
         value = re.sub(r'(?<![\w])/\.[A-Za-z0-9_-]+(?=/(?:student|cid-|plugins))', '', value)
         value = re.sub(r'([?&])' + SENSITIVE + r'=[^&\s\"\'<>]*&?', r'\1', value, flags=re.I)

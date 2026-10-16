@@ -18,3 +18,9 @@ def test_dates_do_not_invent_an_offset():
     assert date_value('2026-10-16 23:59:00') == {'source': '2026-10-16 23:59:00', 'iso': '2026-10-16T23:59:00', 'timezone': None}
     assert date_value('2026-10-16')['iso'] == '2026-10-16'
     assert date_value(None)['iso'] is None
+
+
+def test_encoded_and_html_escaped_session_parameters_are_removed():
+    out = sanitize({'html': '<a href="https://learningsuite.byu.edu/.demo/plugins/Upload/fileDownload.php?fileId=demo&amp;%73ubsessionID=private-session">Read</a>', 'url': 'https://learningsuite.byu.edu/.demo/student/top?%50HPSESSID=private-cookie&keep=yes'})
+    assert 'private-session' not in out['html'] and 'private-cookie' not in out['url']
+    assert 'fileId=demo' in out['html'] and 'keep=yes' in out['url']

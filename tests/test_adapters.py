@@ -107,3 +107,25 @@ def test_content_uses_source_route_token_separately_from_stable_id():
     r = LearningSuiteClient(HTTP(), b).section('content', 'cid-demo')
     assert '/cid-demo/student/pages/id-short-route' in b.reads
     assert r.data[-1]['source_id'] == 'opaque-id' and r.complete
+
+
+def test_source_course_section_is_extracted_without_inventing_missing_values():
+    rows=LearningSuiteClient(HTTP(),None).courses().data
+    assert rows[0]['section']=='001'
+    no_section=HTML.replace('DEMO 101 (001) - Demo Course','Demo Course')
+    assert LearningSuiteClient(HTTP(no_section),None).courses().data[0]['section'] is None
+
+
+def test_malformed_content_ids_preserve_successful_http_records():
+    b=Browser([{'id':['invalid'],'parentID':None,'url':'route-demo'}])
+    r=LearningSuiteClient(HTTP(),b).section('content','cid-demo')
+    assert not r.complete and r.reason['code']=='representation_changed'
+    assert r.data[0]['kind']=='class_information' and r.data[0]['status']=='ok'
+
+
+def test_malformed_content_blocks_do_not_drop_sibling_records():
+    b=Browser(extra={'page':{'id':'page-demo','title':'Page','content':['unexpected'],'status':'OK','expires':False}})
+    r=LearningSuiteClient(HTTP(),b).section('content','cid-demo')
+    assert not r.complete
+    assert r.data[0]['kind']=='class_information' and r.data[0]['status']=='ok'
+    assert r.data[-1]['status']=='error'
