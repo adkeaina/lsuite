@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lsuite"
+version = "0.1.0"
+description = "Read-only BYU Learning Suite CLI with structured JSON output"
+requires-python = ">=3.9"
+dependencies = ["httpx>=0.28,<1", "beautifulsoup4>=4.12,<5"]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.40,<2"]
+test = ["pytest>=8,<9"]
+
+[project.scripts]
+lsuite = "lsuite.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
