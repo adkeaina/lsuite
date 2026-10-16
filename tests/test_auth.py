@@ -40,3 +40,17 @@ def test_rejects_invalid_credential_schema(tmp_path, candidate):
     with pytest.raises(LSuiteError):
         AuthStore(tmp_path).save_validated(candidate, lambda c: None)
     assert not (tmp_path / 'credentials.json').exists()
+
+
+def test_credential_file_input_validates_before_saving(tmp_path):
+    from io import StringIO
+    from lsuite.auth import authenticate
+    source = tmp_path / 'import.json'
+    source.write_text(json.dumps(CREDENTIALS))
+    store = AuthStore(tmp_path / 'config')
+    checked = []
+    diagnostics = StringIO()
+    authenticate(store, StringIO(str(source) + '\n'), diagnostics, validate=lambda c: checked.append(c))
+    assert checked == [CREDENTIALS]
+    assert store.load() == CREDENTIALS
+    assert 'synthetic-session' not in diagnostics.getvalue()
